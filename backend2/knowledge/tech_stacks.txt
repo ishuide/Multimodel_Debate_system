@@ -1,0 +1,51 @@
+Tech stack best practices for startup projects:
+
+Backend frameworks:
+- Python + FastAPI: best for AI/ML projects, rapid prototyping, async support
+- Python + Django: best for content-heavy apps, admin panels, ORM included
+- Node.js + Express: best for real-time apps, JavaScript fullstack teams
+- Go + Gin: best for high-performance microservices, low latency
+- Java + Spring Boot: best for enterprise, banking, healthcare
+
+Frontend frameworks:
+- React: largest ecosystem, most jobs, component-based, steep learning curve
+- Next.js: React + SSR + routing, best for SEO-critical apps
+- Vue.js: easier learning curve, great for small-medium projects
+- Svelte: fastest runtime performance, smaller ecosystem
+
+Databases:
+- PostgreSQL: best general-purpose, JSON support, full-text search, scalable
+- MongoDB: best for flexible schemas, document-heavy apps, rapid prototyping
+- Redis: best for caching, sessions, real-time leaderboards
+- SQLite: best for embedded apps, prototyping, single-user tools
+
+AI/ML stack:
+- LLM integration: OpenAI API, Ollama (local), HuggingFace
+- Vector databases: Pinecone, ChromaDB, Weaviate, Qdrant
+- ML frameworks: PyTorch, TensorFlow, scikit-learn
+- Data processing: Pandas, NumPy, Apache Spark
+
+DevOps essentials:
+- containerization: Docker (always use for consistency)
+- CI/CD: GitHub Actions (free for public repos), GitLab CI
+- hosting: Vercel (frontend), Railway/Render (backend), AWS (enterprise)
+- monitoring: Sentry (errors), Prometheus + Grafana (metrics)
+
+Common stack combinations:
+- MERN: MongoDB, Express, React, Node.js (full JavaScript)
+- PERN: PostgreSQL, Express, React, Node.js (structured data)
+- Python AI stack: FastAPI + React + PostgreSQL + Redis
+- Enterprise: Spring Boot + React + PostgreSQL + Kubernetes
+
+Anti-patterns to avoid:
+- using NoSQL when you need relations (use PostgreSQL instead)
+- choosing microservices for a 3-person team (start monolith)
+- using Kubernetes before you have 10+ services
+- picking bleeding-edge frameworks for production
+- not using an ORM (leads to SQL injection risks)
+
+Resume screening / AI hiring tools specifically:
+- recommended: Python + FastAPI + PostgreSQL + React
+- NLP libraries: spaCy, NLTK, sentence-transformers
+- PDF parsing: PyMuPDF, pdfplumber, Apache Tika
+- matching algorithms: cosine similarity, TF-IDF, embedding search

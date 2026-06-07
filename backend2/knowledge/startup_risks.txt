@@ -1,0 +1,50 @@
+Common startup risks:
+- unrealistic deadlines leading to burnout and poor quality
+- insufficient testing causing production failures
+- lack of market validation before building
+- overengineering features nobody asked for
+- unclear MVP scope leading to feature creep
+- single point of failure (one developer knows everything)
+- no CI/CD pipeline causing deployment fear
+- ignoring security until it's too late
+- poor database design that doesn't scale
+- choosing trendy tech over proven solutions
+
+Technical risks by category:
+
+AI/ML projects:
+- training data quality and bias
+- model accuracy below acceptable threshold
+- high compute costs for inference
+- cold start latency issues
+- hallucination in LLM-based features
+- data privacy and compliance (GDPR, CCPA)
+
+Web/SaaS projects:
+- scalability bottlenecks under load
+- third-party API dependency failures
+- authentication/authorization vulnerabilities
+- poor mobile responsiveness
+- slow page load times (>3 seconds = user loss)
+
+Team risks:
+- bus factor of 1 (critical knowledge in one person)
+- skill gaps in critical areas
+- communication breakdown in remote teams
+- unclear ownership of components
+- developer burnout from crunch culture
+
+Market risks:
+- building what nobody wants (42% startup failure reason)
+- competitor launching first
+- pricing model not sustainable
+- target audience too narrow
+- regulatory changes invalidating product
+
+Mitigation strategies:
+- validate MVP with 10 real users before scaling
+- always have automated tests for critical paths
+- deploy to staging environment first
+- conduct weekly risk reviews
+- maintain a risk register with severity ratings
+- plan for 2x the estimated timeline for unknowns

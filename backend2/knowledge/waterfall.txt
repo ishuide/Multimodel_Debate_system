@@ -1,0 +1,41 @@
+Waterfall methodology works best for:
+- well-defined, stable requirements
+- regulated industries (healthcare, finance, government)
+- projects with fixed scope and budget
+- hardware-software integration projects
+- large teams with clear role separation
+
+Standard waterfall phases:
+1. Requirements Gathering (10-15% of timeline)
+2. System Design (15-20% of timeline)
+3. Implementation/Coding (30-40% of timeline)
+4. Testing & QA (15-20% of timeline)
+5. Deployment (5-10% of timeline)
+6. Maintenance (ongoing)
+
+Best practices:
+- comprehensive requirements document before any coding
+- formal design reviews at each phase gate
+- complete test plans before implementation begins
+- change control board for scope modifications
+- detailed documentation at every phase
+- sign-off required before moving to next phase
+
+Common risks:
+- late discovery of requirement misunderstandings
+- inflexible to market changes during development
+- big-bang integration failures
+- long feedback cycles (months before user sees product)
+- overengineering due to upfront planning bias
+
+Timeline heuristics:
+- 3-person team, 5-week project: requirements (3 days), design (5 days), coding (12 days), testing (4 days), deploy (1 day)
+- always add 25% buffer for waterfall projects
+- testing phase typically takes 1.5x longer than estimated
+- documentation adds ~15% overhead to each phase
+
+When to avoid waterfall:
+- startup MVPs with uncertain product-market fit
+- projects where requirements will change frequently
+- small teams that need flexibility
+- consumer-facing apps needing rapid iteration

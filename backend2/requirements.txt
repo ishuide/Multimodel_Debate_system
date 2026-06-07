@@ -1,0 +1,37 @@
+# Core FastAPI stack (compatible with Gradio 6.9.0)
+fastapi==0.115.2
+starlette==0.40.0
+pydantic==2.7.4
+
+# Ollama for local LLM inference
+ollama==0.2.1
+
+# Server‑sent events helper
+sse-starlette==2.1.0
+
+# CORS middleware
+cors==1.0.1
+
+# Uvicorn ASGI server
+uvicorn==0.29.0
+
+# Transformers – pinned to a version that works for both pyiqa and sentence‑transformers
+transformers==4.41.0
+
+# UI
+gradio==6.9.0
+
+# LangChain ecosystem (all require pydantic >=2.7.4)
+langchain==1.2.18
+langchain-classic==1.0.7
+langchain-core==1.3.3
+langgraph==1.1.10
+
+# Image‑quality assessment toolbox (requires a compatible transformers version)
+pyiqa==0.1.15.post2
+
+# Sentence‑transformers (requires transformers >=4.41.0,<6.0.0)
+sentence-transformers==5.5.1
+
+# ChromaDB for semantic retrieval
+chromadb>=0.4.0

@@ -1,0 +1,49 @@
+Timeline estimation heuristics for startup projects:
+
+General rules:
+- multiply developer estimates by 2x for realistic timelines
+- first-time projects take 3x longer than expected
+- integration work takes 40% of total development time
+- testing should be at least 25% of development time
+- documentation adds 10-15% overhead
+
+By team size:
+- 1 developer: can build MVP in 4-6 weeks (simple app)
+- 2 developers: can build MVP in 3-4 weeks (moderate app)
+- 3 developers: can build MVP in 2-3 weeks (if well-coordinated)
+- 5+ developers: coordination overhead increases, not linearly faster
+
+By project complexity:
+- Simple CRUD app: 2-3 weeks for MVP
+- API + Frontend app: 3-5 weeks for MVP
+- AI/ML integrated app: 5-8 weeks for MVP (data pipeline adds time)
+- Real-time features (chat, streaming): add 2 weeks
+- Payment integration: add 1-2 weeks
+- Multi-tenant SaaS: add 3-4 weeks
+
+Weekly breakdown template (5-week project, 3 developers):
+- Week 1: Architecture, setup, database design, CI/CD
+- Week 2: Core backend APIs, authentication, basic frontend
+- Week 3: Feature development, integration, initial testing
+- Week 4: Advanced features, comprehensive testing, bug fixes
+- Week 5: Polish, deployment, documentation, user testing
+
+Critical path items (do these first):
+- authentication and user management
+- database schema design
+- core API endpoints
+- deployment pipeline
+- main user workflow (happy path)
+
+Common timeline traps:
+- underestimating DevOps setup (CI/CD, hosting, domains)
+- forgetting about error handling and edge cases
+- not accounting for code review time
+- ignoring migration and data seeding time
+- assuming third-party APIs work perfectly first try
+
+Deadline management:
+- if behind by >20% at midpoint, cut scope (don't extend)
+- always have a "must-have" vs "nice-to-have" feature list
+- demo to stakeholders every week to catch misalignment early
+- freeze features at 75% timeline mark, focus on quality

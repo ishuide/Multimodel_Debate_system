@@ -1,0 +1,40 @@
+Agile methodology works best for:
+- rapidly changing requirements
+- startup MVPs
+- iterative releases
+- small cross-functional teams (3-7 members)
+- products needing frequent user feedback
+
+Best practices:
+- weekly sprints (1-2 week cycles)
+- continuous testing and integration
+- rapid feedback loops with stakeholders
+- daily standups (15 min max)
+- sprint retrospectives after every cycle
+- user stories over technical specs
+- working software over documentation
+- velocity tracking per sprint
+
+Common risks:
+- scope creep from constant reprioritization
+- poor sprint planning leading to burnout
+- lack of documentation for handoffs
+- technical debt from speed-first mentality
+- stakeholder fatigue from frequent demos
+
+Sprint planning heuristics:
+- 1 developer = ~20 story points per 2-week sprint
+- always reserve 20% capacity for bugs and tech debt
+- MVP features should fit in 2-3 sprints max
+- never plan more than 80% sprint capacity
+- first sprint should produce a deployable skeleton
+
+Team allocation patterns:
+- 3-person team: 1 fullstack, 1 backend, 1 frontend
+- 5-person team: 2 backend, 2 frontend, 1 DevOps
+- always assign 1 person as Scrum Master (can be part-time)
+
+Successful agile startup examples:
+- Spotify: squad-based agile with autonomous teams
+- Slack: 2-week sprints with continuous deployment
+- Airbnb: feature flags + rapid iteration cycles

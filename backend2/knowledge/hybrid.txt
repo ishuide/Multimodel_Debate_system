@@ -1,0 +1,41 @@
+Hybrid methodology combines Agile and Waterfall:
+- use waterfall for high-level planning and milestones
+- use agile sprints within each waterfall phase
+- best for medium-complexity projects with some fixed requirements
+
+Hybrid approach patterns:
+- Phase-Gate Agile: waterfall phases with agile execution inside each
+- Agile-Fall: agile discovery + waterfall delivery
+- Water-Scrum-Fall: waterfall planning, scrum execution, waterfall deployment
+- SAFe (Scaled Agile Framework): enterprise hybrid approach
+
+MVP-first strategy:
+- identify core value proposition (1-3 features max)
+- build MVP in first 2-3 sprints
+- validate with real users before expanding
+- iterate on validated features only
+- kill unvalidated features early
+
+Best practices:
+- define fixed milestones upfront (waterfall)
+- execute within milestones using sprints (agile)
+- documentation at milestone boundaries only
+- user testing at every milestone
+- architecture decisions upfront, feature details iterative
+
+Timeline allocation for hybrid:
+- Phase 1 - Discovery & Architecture (15%): requirements + system design
+- Phase 2 - MVP Sprint (40%): core features in agile sprints
+- Phase 3 - Hardening Sprint (25%): testing, polish, edge cases
+- Phase 4 - Launch (20%): deployment, monitoring, documentation
+
+Common risks:
+- confusion about when to use which methodology
+- team members unfamiliar with hybrid approaches
+- milestone pressure conflicting with sprint flexibility
+- documentation gaps between agile and waterfall phases
+
+Successful hybrid examples:
+- Microsoft Azure: SAFe framework with team-level scrum
+- Tesla software: fixed hardware milestones + agile software sprints
+- Stripe: architectural waterfall + feature agile
