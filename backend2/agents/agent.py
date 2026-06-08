@@ -102,7 +102,7 @@ class AgentRegistry:
             name="judge",
             role="Technical Judge",
             expertise="Evaluation, Scoring, Feasibility Assessment, Alignment Check.",
-            model="qwen2:1.5b",
+            model="nvidia/meta/llama-3.1-70b-instruct",
             can_judge=True,
             prompt_template="""Evaluate this project plan.
 
@@ -145,7 +145,7 @@ Output ONLY JSON."""
             name="consensus",
             role="Chief Strategy Officer",
             expertise="Synthesis, Roadmapping, Overlap Resolution.",
-            model="phi3:mini",
+            model="nvidia/meta/llama-3.1-8b-instruct",
             schema_name="UnifiedPlan",
             can_synthesize=True,
             prompt_template="""You are Chief Strategy Officer building the final consensus plan.

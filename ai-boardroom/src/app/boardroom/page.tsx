@@ -1,422 +1,612 @@
 'use client'
-import { useState } from 'react'
-import PDFDownloadPanel from '@/components/PDFDownloadPanel'
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+import { useMemo, useState, useRef, useEffect } from "react";
+import { toast } from "sonner";
+import { PageLayout } from "@/components/page-layout";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
+import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  Sparkles, Layers, Scale, GitMerge, MapIcon, Play, AlertTriangle,
+  CheckCircle2, MessageSquareQuote, Shield, Trophy, Download, Wand2, Boxes, Info,
+} from "lucide-react";
+import { SkillModePicker } from "@/components/skill-mode-picker";
+import { DebateVizPanel, type DebateRound } from "@/components/debate-viz";
+import { BlueprintPanel } from "@/components/blueprint-panel";
+import { SKILL_MODES, type SkillModeId } from "@/lib/skill-modes";
+import { getNvidiaKey } from "@/lib/ollama";
+import {
+  downloadRoadmapMarkdown, downloadRoadmapPdf,
+  type RoadmapDoc, type BlueprintDoc,
+} from "@/lib/export";
 
-const inputStyle: React.CSSProperties = {
-  width: '100%',
-  background: 'var(--surface-3)',
-  border: '1px solid var(--border)',
-  borderRadius: 8,
-  padding: '12px 16px',
-  fontSize: 15,
-  color: 'var(--text-primary)',
-  fontFamily: 'var(--font-body)',
-  outline: 'none',
-  transition: 'border-color 0.15s',
-}
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-const labelStyle: React.CSSProperties = {
-  fontSize: 13,
-  color: 'var(--text-secondary)',
-  marginBottom: 8,
-  display: 'block',
-  fontWeight: 500,
-  letterSpacing: '0.02em',
-}
+const stages = [
+  { id: "mode", label: "Skill Mode", Icon: Boxes },
+  { id: "input", label: "Project Input", Icon: MessageSquareQuote },
+  { id: "debate", label: "Debate Arena", Icon: Sparkles },
+  { id: "judge", label: "Judge", Icon: Scale },
+  { id: "consensus", label: "Consensus", Icon: GitMerge },
+  { id: "roadmap", label: "Roadmap", Icon: MapIcon },
+  { id: "blueprint", label: "Blueprint", Icon: Wand2 },
+] as const;
+type StageId = (typeof stages)[number]["id"];
 
 export default function BoardroomPage() {
-  const [idea, setIdea] = useState('')
-  const [team, setTeam] = useState(5)
-  const [deadline, setDeadline] = useState(12)
-  const [stack, setStack] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [streamOutput, setStreamOutput] = useState<string[]>([])
-  const [error, setError] = useState('')
+  const [stage, setStage] = useState<StageId>("mode");
+  const [running, setRunning] = useState(false);
+  const [modeId, setModeId] = useState<SkillModeId | null>("startup");
+  const [form, setForm] = useState({
+    primary: "A voice-driven AI tutor for high-school physics",
+    secondary: "Next.js, FastAPI, Ollama, ChromaDB",
+    team: 4,
+    deadline: 8,
+  });
 
-  // Session data extracted from stream for PDF generation
-  const [sessionDone, setSessionDone] = useState(false)
-  const [sessionData, setSessionData] = useState<{
-    consensusPlan: Record<string, unknown>
-    judgeScores: Record<string, unknown>
-    methodologyWeights: Record<string, number>
-    projectId: string
-  }>({ consensusPlan: {}, judgeScores: {}, methodologyWeights: {}, projectId: '' })
+  const [rounds, setRounds] = useState<DebateRound[]>([]);
+  const [judgeScores, setJudgeScores] = useState<Record<string, any>>({});
+  const [roadmap, setRoadmap] = useState<any>({ steps: [], risks: [] });
+  const [consensusReasoning, setConsensusReasoning] = useState("");
+  const [blueprint, setBlueprint] = useState<BlueprintDoc>({ title: "", mode: "", steps: [] });
+  const [blueprintLoading, setBlueprintLoading] = useState(false);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    if (!idea.trim()) return
+  const mode = modeId ? SKILL_MODES[modeId] : null;
+  const agents = useMemo(
+    () => mode?.agents ?? [
+      { name: "Agile", tone: "agile", role: "Iterative Sprint PM" },
+      { name: "Waterfall", tone: "waterfall", role: "Phase-Gate Director" },
+      { name: "Hybrid", tone: "hybrid", role: "Adaptive Strategist" },
+    ],
+    [mode],
+  );
 
-    setLoading(true)
-    setStreamOutput([])
-    setError('')
-    setSessionDone(false)
+  const stageIdx = stages.findIndex(s => s.id === stage);
 
-    const localConsensus: Record<string, unknown> = {}
-    const localScores: Record<string, unknown> = {}
-    let localProjectId = ''
+  const roadmapDoc: RoadmapDoc = {
+    title: `${mode?.label ?? "Boardroom"} Roadmap`,
+    mode: mode?.label ?? "Default",
+    meta: {
+      [mode?.primaryFieldLabel ?? "Primary"]: form.primary,
+      [mode?.secondaryFieldLabel ?? "Secondary"]: form.secondary,
+      "Team size": form.team,
+      "Deadline (weeks)": form.deadline,
+    },
+    steps: roadmap.steps.map((s: any) => {
+      const srcStr = s.source || s.sources?.[0] || "Consensus";
+      return {
+        ...s,
+        sources: [srcStr]
+      };
+    }),
+    risks: roadmap.risks,
+  };
+
+  async function run() {
+    if (!mode) return;
+    setRunning(true);
+    setStage("debate");
+    setRounds([]);
+    setJudgeScores({});
+    setRoadmap({ steps: [], risks: [] });
+
+    let currentRounds: DebateRound[] = [];
+    const _setRounds = (newRounds: DebateRound[]) => {
+        currentRounds = newRounds;
+        setRounds([...currentRounds]);
+    };
+
+    function updateTurn(roundNum: number, agentName: string, updateFn: (t: any) => any) {
+      const cloned = JSON.parse(JSON.stringify(currentRounds));
+      let r = cloned.find((x: any) => x.round === roundNum);
+      if (!r) {
+        r = { round: roundNum, turns: [], contradictions: [] };
+        cloned.push(r);
+      }
+      let t = r.turns.find((x: any) => x.agent === agentName);
+      if (!t) {
+        t = { agent: agentName, claim: "", critiques: [], confidence: 0.8 };
+        r.turns.push(t);
+      }
+      Object.assign(t, updateFn(t));
+      _setRounds(cloned);
+    }
 
     try {
       const params = new URLSearchParams({
-        idea,
-        techStack: stack,
-        members: team.toString(),
-        deadlineWeeks: deadline.toString(),
-      })
-      const res = await fetch(`${API_BASE}/debate?${params.toString()}`, {
-        method: 'GET'
-      })
+        idea: form.primary,
+        techStack: form.secondary,
+        members: form.team.toString(),
+        deadlineWeeks: form.deadline.toString(),
+      });
+      const nk = getNvidiaKey();
+      if (nk) params.append("nvidiaKey", nk);
+      const res = await fetch(`${API_BASE}/debate?${params.toString()}`);
+      if (!res.ok) throw new Error(`Server responded with ${res.status}`);
 
-      if (!res.ok) throw new Error(`Server responded with ${res.status}`)
-
-      const reader = res.body!.getReader()
-      const decoder = new TextDecoder()
-      let buffer = ''
+      const reader = res.body!.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let currentEvent = 'message';
+      const BACKEND_PERSONAS = ["agile", "waterfall", "hybrid"];
+      
+      const mapPersona = (p: string) => {
+        const idx = BACKEND_PERSONAS.indexOf(p.toLowerCase());
+        if (idx >= 0 && agents[idx]) return agents[idx].name;
+        return p;
+      };
 
       while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        buffer += decoder.decode(value, { stream: true })
-        const parts = buffer.split('\n')
-        buffer = parts.pop() || ''
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split('\n');
+        buffer = parts.pop() || '';
 
         for (const rawLine of parts) {
-          const line = rawLine.trim()
-          if (!line.startsWith('data:')) continue
-          const data = line.replace('data:', '').trim()
-          if (!data || data === '[DONE]') continue
+          const line = rawLine.trim();
+          if (!line) continue;
+          
+          if (line.startsWith('event:')) {
+            currentEvent = line.replace('event:', '').trim();
+          } else if (line.startsWith('data:')) {
+            const dataStr = line.replace('data:', '').trim();
+            if (dataStr === '[DONE]') continue;
 
-          setStreamOutput(prev => [...prev, data])
-
-          // Extract structured data from stream for PDF
-          try {
-            const parsed = JSON.parse(data)
-
-            if (parsed.roadmap && Array.isArray(parsed.roadmap)) {
-              Object.assign(localConsensus, parsed)
+            try {
+              const parsed = JSON.parse(dataStr);
+              const mappedPersona = parsed.persona ? mapPersona(parsed.persona) : undefined;
+              
+              if (currentEvent === 'partial' && mappedPersona) {
+                let claim = "Initial plan proposed.";
+                try {
+                    const planObj = JSON.parse(parsed.response);
+                    if (planObj.phases) claim = "Proposed phase-gated waterfall plan.";
+                    else if (planObj.tasks) claim = "Proposed iterative agile sprint plan.";
+                    else claim = "Proposed initial implementation plan.";
+                } catch(e) {}
+                updateTurn(1, mappedPersona, () => ({ claim, confidence: 0.8 }));
+              }
+              else if (currentEvent === 'debate' && mappedPersona) {
+                let critObj: any = {};
+                try { critObj = JSON.parse(parsed.critique); } catch(e) {}
+                updateTurn(2, mappedPersona, () => ({
+                  claim: critObj.weakness_1 || "Critiqued other plans.",
+                  confidence: 0.7,
+                  critiques: agents.filter(a => a.name !== mappedPersona).map(a => ({ target: a.name, strength: 0.5 }))
+                }));
+              }
+              else if (currentEvent === 'defense' && mappedPersona) {
+                updateTurn(3, mappedPersona, () => ({ claim: parsed.defense || "Defended core strategy.", confidence: 0.85 }));
+              }
+              else if (currentEvent === 'revision' && mappedPersona) {
+                updateTurn(4, mappedPersona, () => ({ claim: "Revised plan based on board feedback.", confidence: 0.9 }));
+              }
+              else if (currentEvent === 'judge' && mappedPersona) {
+                setStage(prev => prev === 'debate' ? 'judge' : prev);
+                setJudgeScores(prev => ({ ...prev, [mappedPersona]: parsed.scores }));
+              }
+              else if (currentEvent === 'final') {
+                setStage("consensus");
+                setConsensusReasoning(parsed.boardDecision?.consensus_reasoning || "Consensus reached.");
+                setRoadmap({ steps: parsed.roadmap || [], risks: parsed.risks || [] });
+                setTimeout(() => setStage("roadmap"), 1500);
+                toast.success("Session complete. Roadmap ready.");
+              }
+              
+            } catch (e) {
+                // ignore unparseable data
             }
-            if (parsed.judgeScores) {
-              Object.assign(localScores, parsed.judgeScores)
-            }
-            if (parsed.session_id) {
-              localProjectId = parsed.session_id
-            }
-
-            if (parsed.phase === 'consensus' && parsed.plan) {
-              Object.assign(localConsensus, parsed.plan)
-            }
-            if (parsed.phase === 'judge' && parsed.agent && parsed.scores) {
-              localScores[parsed.agent] = parsed.scores
-            }
-            if (parsed.project_id) {
-              localProjectId = parsed.project_id
-            }
-          } catch {
-            // Non-JSON payloads are rendered as plain text
           }
         }
       }
-
-      setSessionData({
-        consensusPlan: localConsensus,
-        judgeScores: localScores,
-        methodologyWeights: { Agile: 40, Waterfall: 25, Hybrid: 35 },
-        projectId: localProjectId,
-      })
-      setSessionDone(true)
-
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Connection failed. Make sure your backend is running on port 8000.')
+      toast.error(`Connection failed: ${(err as Error).message}`);
     } finally {
-      setLoading(false)
+      setRunning(false);
+    }
+  }
+
+  async function generateBlueprint() {
+    if (!mode) return;
+    setStage("blueprint");
+    setBlueprint({ title: roadmapDoc.title.replace("Roadmap", "Blueprint"), mode: mode.label, steps: [] });
+    setBlueprintLoading(true);
+
+    try {
+      const res = await fetch(`${API_BASE}/blueprint`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+              roadmap: roadmap.steps,
+              brief: form.primary,
+              mode: mode.label
+          })
+      });
+      if (!res.ok) throw new Error("Failed to generate blueprint");
+      const data = await res.json();
+      setBlueprint(b => ({ ...b, steps: data.steps ?? [] }));
+      toast.success("Implementation blueprint ready");
+    } catch (e) {
+      toast.error(`Blueprint failed: ${(e as Error).message}`);
+    } finally {
+      setBlueprintLoading(false);
     }
   }
 
   return (
-    <div style={{ paddingTop: 64, minHeight: '100vh' }}>
-      <div style={{ maxWidth: 1200, margin: '0 auto', padding: '3rem 2rem' }}>
-
-        {/* Header */}
-        <div style={{ marginBottom: '3rem' }}>
-          <div style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: 11, color: 'var(--gold)',
-            letterSpacing: '0.12em',
-            textTransform: 'uppercase',
-            marginBottom: '0.75rem',
-          }}>
-            Session Room
+    <PageLayout>
+      <section className="mx-auto max-w-7xl px-6 pt-12 pb-6">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <div className="text-xs font-mono uppercase tracking-wider text-primary mb-2">/boardroom</div>
+            <h1 className="text-4xl font-semibold">The Boardroom</h1>
+            <p className="text-muted-foreground mt-2">
+              {mode ? `Mode: ${mode.label} · ${mode.tagline}` : "Pick a skill mode to begin."}
+            </p>
           </div>
-          <h1 style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: 'clamp(1.8rem, 4vw, 2.8rem)',
-            fontWeight: 500, color: 'var(--text-primary)',
-            marginBottom: '0.75rem',
-          }}>
-            The Boardroom
-          </h1>
-          <p style={{ color: 'var(--text-secondary)', fontSize: 15, maxWidth: 520 }}>
-            Submit your project idea. Three AI agents debate, defend, and revise their plans — then produce a unified roadmap you can download as a PDF.
-          </p>
+          <div className="flex items-center gap-2 flex-wrap">
+            {agents.map(a => (
+              <Badge key={a.name} variant="outline" className="border-border/60 gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full" style={{ background: `var(--${a.tone})` }} />
+                {a.name}
+              </Badge>
+            ))}
+          </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '340px 1fr', gap: '2rem', alignItems: 'start' }} className="boardroom-grid">
-
-          {/* ── Left column: Input + Download ─────────────── */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-
-            {/* Input panel */}
-            <div style={{
-              background: 'var(--surface-2)',
-              border: '1px solid var(--border)',
-              borderRadius: 14,
-              padding: '1.75rem',
-            }}>
-              <h2 style={{ fontSize: 15, fontWeight: 500, color: 'var(--text-primary)', marginBottom: '1.5rem' }}>
-                Project Brief
-              </h2>
-
-              <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                <div>
-                  <label style={labelStyle}>Project Idea *</label>
-                  <textarea
-                    value={idea}
-                    onChange={e => setIdea(e.target.value)}
-                    placeholder="Describe your project concept in detail..."
-                    rows={5}
-                    required
-                    style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.6 }}
-                    onFocus={e => (e.target.style.borderColor = 'var(--gold-border)')}
-                    onBlur={e => (e.target.style.borderColor = 'var(--border)')}
-                  />
-                </div>
-
-                <div>
-                  <label style={labelStyle}>Tech Stack</label>
-                  <input
-                    type="text"
-                    value={stack}
-                    onChange={e => setStack(e.target.value)}
-                    placeholder="e.g. Next.js, FastAPI, PostgreSQL"
-                    style={inputStyle}
-                    onFocus={e => (e.target.style.borderColor = 'var(--gold-border)')}
-                    onBlur={e => (e.target.style.borderColor = 'var(--border)')}
-                  />
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                  <div>
-                    <label style={labelStyle}>Team Size</label>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <input type="range" min={1} max={20} value={team}
-                        onChange={e => setTeam(Number(e.target.value))}
-                        style={{ flex: 1, accentColor: 'var(--gold)' }} />
-                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 14, color: 'var(--gold)', minWidth: 24 }}>{team}</span>
-                    </div>
-                  </div>
-                  <div>
-                    <label style={labelStyle}>Deadline (weeks)</label>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <input type="range" min={2} max={52} value={deadline}
-                        onChange={e => setDeadline(Number(e.target.value))}
-                        style={{ flex: 1, accentColor: 'var(--gold)' }} />
-                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 14, color: 'var(--gold)', minWidth: 24 }}>{deadline}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {error && (
-                  <div style={{
-                    padding: '10px 14px',
-                    background: 'rgba(212,101,74,0.1)',
-                    border: '1px solid rgba(212,101,74,0.3)',
-                    borderRadius: 8, fontSize: 13, color: '#D4654A',
-                  }}>
-                    {error}
-                  </div>
-                )}
-
-                <button type="submit" disabled={loading || !idea.trim()} style={{
-                  padding: '13px',
-                  background: loading || !idea.trim() ? 'var(--surface-4)' : 'var(--gold)',
-                  color: loading || !idea.trim() ? 'var(--text-muted)' : '#0E0E10',
-                  border: 'none', borderRadius: 8, fontSize: 15, fontWeight: 500,
-                  cursor: loading || !idea.trim() ? 'not-allowed' : 'pointer',
-                  transition: 'all 0.15s',
-                }}>
-                  {loading ? 'Debate in progress...' : 'Start Boardroom Session →'}
+        {/* Stage stepper */}
+        <div className="mt-8 glass-card rounded-2xl p-4 flex flex-wrap items-center gap-2">
+          {stages.map((s, i) => {
+            const active = s.id === stage;
+            const done = i < stageIdx;
+            return (
+              <div key={s.id} className="flex items-center gap-2">
+                <button
+                  onClick={() => setStage(s.id)}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all ${
+                    active ? "bg-primary text-primary-foreground shadow-[0_0_25px_oklch(0.82_0.14_80/0.4)]" :
+                    done ? "text-foreground bg-secondary" : "text-muted-foreground hover:bg-secondary/50"
+                  }`}
+                >
+                  <s.Icon className="h-4 w-4" />
+                  <span className="font-medium hidden sm:inline">{s.label}</span>
                 </button>
-              </form>
-            </div>
-
-            {/* ── PDF Download Panel ── */}
-            <div style={{
-              background: 'var(--surface-2)',
-              border: `1px solid ${sessionDone ? 'var(--gold-border)' : 'var(--border)'}`,
-              borderRadius: 14,
-              padding: '1.5rem',
-            }}>
-              <div style={{
-                fontFamily: 'var(--font-mono)', fontSize: 10,
-                color: 'var(--text-muted)', letterSpacing: '0.1em',
-                textTransform: 'uppercase', marginBottom: '0.75rem',
-              }}>
-                Export
+                {i < stages.length - 1 && <div className="hidden md:block h-px w-4 bg-border" />}
               </div>
-              <PDFDownloadPanel
-                idea={idea}
-                stack={stack}
-                team={team}
-                deadline={deadline}
-                projectId={sessionData.projectId}
-                consensusPlan={sessionData.consensusPlan}
-                judgeScores={sessionData.judgeScores}
-                methodologyWeights={sessionData.methodologyWeights}
-                disabled={!sessionDone}
-              />
-            </div>
-          </div>
+            );
+          })}
+        </div>
+      </section>
 
-          {/* ── Right column: Debate output ─────────────── */}
-          <div style={{
-            background: 'var(--surface-2)',
-            border: '1px solid var(--border)',
-            borderRadius: 14,
-            padding: '1.75rem',
-            minHeight: 560,
-          }}>
-            {streamOutput.length === 0 && !loading ? (
-              <EmptyState />
-            ) : (
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
-                  <h2 style={{ fontSize: 15, fontWeight: 500, color: 'var(--text-primary)' }}>
-                    Debate Arena
-                  </h2>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    {sessionDone && (
-                      <span style={{
-                        fontSize: 11, color: 'var(--accent-teal)',
-                        fontFamily: 'var(--font-mono)',
-                        border: '1px solid rgba(58,175,169,0.3)',
-                        padding: '2px 10px', borderRadius: 20,
-                        background: 'rgba(58,175,169,0.08)',
-                      }}>
-                        Session complete
-                      </span>
-                    )}
-                    {loading && <PulsingDot />}
+      <section className="mx-auto max-w-7xl px-6 pb-20">
+        {stage === "mode" && (
+          <Card className="glass-card border-border/50 p-6 md:p-8">
+            <div className="mb-6">
+              <h2 className="text-2xl font-semibold">Choose an AI Skill Mode</h2>
+              <p className="text-sm text-muted-foreground mt-1">
+                Each mode swaps the agents, the brief fields, and the system prompts sent to your local model.
+              </p>
+            </div>
+            <SkillModePicker
+              selected={modeId}
+              onSelect={setModeId}
+              onContinue={() => setStage("input")}
+            />
+          </Card>
+        )}
+
+        {stage === "input" && mode && (
+          <Card className="glass-card border-border/50 p-8 grid md:grid-cols-2 gap-8">
+            <div>
+              <h2 className="text-2xl font-semibold">Project brief</h2>
+              <p className="text-muted-foreground mt-2 text-sm">The board needs four inputs to begin deliberation.</p>
+              <div className="mt-6 space-y-4">
+                <div>
+                  <Label>{mode.primaryFieldLabel}</Label>
+                  <Textarea
+                    value={form.primary}
+                    onChange={e => setForm({ ...form, primary: e.target.value })}
+                    placeholder={mode.primaryFieldPlaceholder}
+                    className="mt-1.5 min-h-[100px]"
+                  />
+                </div>
+                <div>
+                  <Label>{mode.secondaryFieldLabel}</Label>
+                  <Input
+                    value={form.secondary}
+                    onChange={e => setForm({ ...form, secondary: e.target.value })}
+                    placeholder={mode.secondaryFieldPlaceholder}
+                    className="mt-1.5"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>Team size</Label>
+                    <Input type="number" min="1" value={form.team} onChange={e => setForm({ ...form, team: Math.max(1, +e.target.value) })} className="mt-1.5" />
+                  </div>
+                  <div>
+                    <Label>Deadline (weeks)</Label>
+                    <Input type="number" min="1" value={form.deadline} onChange={e => setForm({ ...form, deadline: Math.max(1, +e.target.value) })} className="mt-1.5" />
                   </div>
                 </div>
-                <div style={{
-                  display: 'flex', flexDirection: 'column', gap: 8,
-                  maxHeight: 620, overflowY: 'auto',
-                  fontFamily: 'var(--font-mono)', fontSize: 13,
-                }}>
-                  {streamOutput.map((line, i) => (
-                    <StreamLine key={i} line={line} />
-                  ))}
+                <Button variant="hero" size="lg" className="w-full mt-2" onClick={run} disabled={running}>
+                  <Play className="h-4 w-4" /> Convene the Board
+                </Button>
+              </div>
+            </div>
+            <div className="space-y-3">
+              <div className="text-sm font-mono uppercase tracking-wider text-muted-foreground">Pipeline preview</div>
+              {[
+                `Brief → ${mode.agents.length} ${mode.label} agents`,
+                "Run multi-round debate via backend",
+                "Visualize attacks · contradictions · confidence",
+                "Judge scores · Consensus synthesis",
+                "Generate downloadable roadmap (MD + PDF)",
+                "Enhance into implementation blueprint",
+              ].map((s, i) => (
+                <div key={s} className="flex items-center gap-3 p-3 rounded-lg bg-secondary/40 border border-border/50">
+                  <div className="h-7 w-7 rounded-md bg-primary/15 text-primary grid place-items-center text-xs font-mono">{i + 1}</div>
+                  <span className="text-sm">{s}</span>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
+
+        {stage === "debate" && (
+          <>
+            <DebateVizPanel rounds={rounds} agents={agents} />
+            
+            {rounds.length === 0 ? (
+               <div className="mt-8 mb-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                 <h3 className="text-lg font-semibold mb-2 flex items-center gap-2"><Sparkles className="h-5 w-5 text-primary" /> Meet Your Boardroom</h3>
+                 <p className="text-muted-foreground text-sm mb-6">The AI models are currently analyzing your project and preparing their initial plans. Here is the persona breakdown for this debate:</p>
+                 <div className="grid gap-4 md:grid-cols-3">
+                   {agents.map(a => (
+                     <div key={a.name} className="p-4 rounded-xl border border-border/50 bg-secondary/20">
+                       <div className="flex items-center gap-2 mb-2">
+                          <div className="h-6 w-6 rounded flex items-center justify-center" style={{ background: `var(--${a.tone})`, color: '#0E0E10' }}>
+                            <Layers className="h-3 w-3" />
+                          </div>
+                          <span className="font-semibold">{a.name}</span>
+                          <span className="text-xs text-muted-foreground ml-auto">{a.role}</span>
+                       </div>
+                       {a.focus && <div className="text-sm text-muted-foreground mb-2"><strong className="text-foreground">Focus:</strong> {a.focus}</div>}
+                       {a.debateStyle && <div className="text-sm text-muted-foreground"><strong className="text-foreground">Style:</strong> {a.debateStyle}</div>}
+                     </div>
+                   ))}
+                 </div>
+               </div>
+            ) : (
+               <div className="flex justify-end mt-2 mb-4">
+                 <Dialog>
+                   <DialogTrigger asChild>
+                     <Button variant="outline" size="sm" className="gap-2">
+                       <Info className="h-4 w-4" /> Agent Personas
+                     </Button>
+                   </DialogTrigger>
+                   <DialogContent className="max-w-3xl glass-card border-border/50">
+                     <DialogHeader>
+                       <DialogTitle>Debate Personas</DialogTitle>
+                       <DialogDescription>The competing AI roles evaluating your project.</DialogDescription>
+                     </DialogHeader>
+                     <div className="grid gap-4 md:grid-cols-3 mt-4">
+                       {agents.map(a => (
+                         <div key={a.name} className="p-4 rounded-xl border border-border/50 bg-secondary/20">
+                           <div className="flex items-center gap-2 mb-2">
+                              <div className="h-6 w-6 rounded flex items-center justify-center" style={{ background: `var(--${a.tone})`, color: '#0E0E10' }}>
+                                <Layers className="h-3 w-3" />
+                              </div>
+                              <span className="font-semibold">{a.name}</span>
+                           </div>
+                           {a.focus && <div className="text-sm text-muted-foreground mb-2"><strong className="text-foreground">Focus:</strong> {a.focus}</div>}
+                           {a.debateStyle && <div className="text-sm text-muted-foreground"><strong className="text-foreground">Style:</strong> {a.debateStyle}</div>}
+                         </div>
+                       ))}
+                     </div>
+                   </DialogContent>
+                 </Dialog>
+               </div>
+            )}
+
+            <div className="grid lg:grid-cols-3 gap-5 mt-5">
+              {agents.map(a => {
+                const turns = rounds.flatMap(r => r.turns.filter(t => t.agent === a.name).map(t => ({ ...t, round: r.round })));
+                return (
+                  <Card key={a.name} className="glass-card border-border/50 p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-2.5">
+                        <div className="h-9 w-9 rounded-lg grid place-items-center" style={{ background: `color-mix(in oklab, var(--${a.tone}) 18%, transparent)`, color: `var(--${a.tone})` }}>
+                          <Layers className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <div className="font-semibold">{a.name}</div>
+                          <div className="text-xs text-muted-foreground">{a.role}</div>
+                        </div>
+                      </div>
+                      <Badge variant="outline">Rounds {rounds.length}</Badge>
+                    </div>
+                    <div className="space-y-3">
+                      {turns.length === 0 && (
+                        <div className="text-sm text-muted-foreground">Waiting for turns…</div>
+                      )}
+                      {turns.map((t, i) => (
+                        <div key={i} className="flex items-start gap-2.5 p-3 rounded-lg bg-secondary/40">
+                          <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" style={{ color: `var(--${a.tone})` }} />
+                          <div>
+                            <div className="text-xs font-mono uppercase tracking-wider text-muted-foreground">
+                              Round {t.round} · confidence {(t.confidence * 100).toFixed(0)}%
+                            </div>
+                            <div className="text-sm mt-0.5">{t.claim}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+          </>
+        )}
+
+        {stage === "judge" && (
+          <Card className="glass-card border-border/50 p-8">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="h-10 w-10 rounded-lg bg-primary/15 text-primary grid place-items-center"><Scale className="h-5 w-5" /></div>
+              <div>
+                <h2 className="text-2xl font-semibold">Judge evaluation</h2>
+                <p className="text-sm text-muted-foreground">Deterministic 5-axis scoring with alignment caps.</p>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-muted-foreground border-b border-border/50">
+                    <th className="py-3 px-2 font-medium">Agent</th>
+                    {["Feasibility", "Completeness", "Alignment", "Risk", "Innovation", "Total"].map(h => (
+                      <th key={h} className="py-3 px-2 font-medium">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {agents.map((a, idx) => {
+                    const agentScores = judgeScores[a.name] || {};
+                    const metrics = agentScores.metrics || {
+                        feasibility: 50, completeness: 50, alignment: 50, risk_awareness: 50, innovation: 50
+                    };
+                    const scores = [metrics.feasibility, metrics.completeness, metrics.alignment, metrics.risk_awareness, metrics.innovation];
+                    const total = agentScores.final_score || scores.reduce((ac, cv) => ac + cv, 0);
+                    
+                    return (
+                      <tr key={a.name} className="border-b border-border/30">
+                        <td className="py-4 px-2 font-medium flex items-center gap-2">
+                          <span className="h-2 w-2 rounded-full" style={{ background: `var(--${a.tone})` }} />
+                          {a.name}
+                        </td>
+                        {scores.map((v, i) => (
+                          <td key={i} className="py-4 px-2">
+                            <div className="flex items-center gap-2">
+                              <Progress value={v} className="h-1.5 w-20" />
+                              <span className="font-mono text-xs">{v}</span>
+                            </div>
+                          </td>
+                        ))}
+                        <td className="py-4 px-2 font-mono font-semibold text-primary">{total}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="mt-6 flex items-center gap-2 text-sm text-muted-foreground">
+              <Trophy className="h-4 w-4 text-primary" /> Scores derived from backend judge evaluation.
+            </div>
+          </Card>
+        )}
+
+        {stage === "consensus" && (
+          <Card className="glass-card border-border/50 p-8">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="h-10 w-10 rounded-lg bg-accent/20 text-accent grid place-items-center"><GitMerge className="h-5 w-5" /></div>
+              <div>
+                <h2 className="text-2xl font-semibold">Consensus formation</h2>
+                <p className="text-sm text-muted-foreground">Overlap detection with per-step source attribution.</p>
+              </div>
+            </div>
+            <div className="grid md:grid-cols-2 gap-6">
+              <div>
+                <div className="text-xs font-mono uppercase tracking-wider text-muted-foreground mb-3">Consensus reasoning</div>
+                <p className="text-sm leading-relaxed text-muted-foreground">
+                  {consensusReasoning}
+                </p>
+              </div>
+              <div>
+                <div className="text-xs font-mono uppercase tracking-wider text-muted-foreground mb-3">Board decision</div>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between"><span className="text-muted-foreground">Mode</span><span>{mode?.label}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Rounds</span><span className="font-mono">{rounds.length}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Steps planned</span><span className="font-mono">{roadmap.steps.length}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Risks identified</span><span className="font-mono">{roadmap.risks.length}</span></div>
                 </div>
               </div>
-            )}
-          </div>
-        </div>
-      </div>
+            </div>
+          </Card>
+        )}
 
-      <style>{`
-        @media (max-width: 900px) {
-          .boardroom-grid { grid-template-columns: 1fr !important; }
-        }
-      `}</style>
-    </div>
-  )
-}
+        {stage === "roadmap" && (
+          <div className="space-y-6">
+            <Card className="glass-card border-border/50 p-8">
+              <div className="flex items-start justify-between gap-4 flex-wrap mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-lg bg-primary/15 text-primary grid place-items-center"><MapIcon className="h-5 w-5" /></div>
+                  <div>
+                    <h2 className="text-2xl font-semibold">Execution roadmap</h2>
+                    <p className="text-sm text-muted-foreground">Validated final contract · sourced per step.</p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" size="sm" onClick={() => downloadRoadmapMarkdown(roadmapDoc)}>
+                    <Download className="h-4 w-4" /> Markdown
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => downloadRoadmapPdf(roadmapDoc)}>
+                    <Download className="h-4 w-4" /> PDF
+                  </Button>
+                  <Button variant="hero" size="sm" onClick={generateBlueprint}>
+                    <Wand2 className="h-4 w-4" /> Enhance & Detail
+                  </Button>
+                </div>
+              </div>
+              <div className="relative pl-6 space-y-4 before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-px before:bg-gradient-to-b before:from-primary/60 before:via-accent/60 before:to-primary/60">
+                {roadmap.steps.map((step: any) => (
+                  <div key={step.week} className="relative">
+                    <div className="absolute -left-[18px] top-1.5 h-3 w-3 rounded-full bg-primary shadow-[0_0_12px_var(--primary)]" />
+                    <div className="flex items-baseline justify-between gap-4 flex-wrap">
+                      <div className="font-medium">Week {step.week}: {step.task || step.title}</div>
+                      <div className="flex gap-1.5">
+                        {(step.sources || step.source || []).map((src: string) => {
+                          const agent = agents.find(a => a.name === src);
+                          const tone = agent?.tone ?? "hybrid";
+                          return (
+                            <span key={src} className="text-[10px] font-mono px-2 py-0.5 rounded"
+                              style={{ background: `color-mix(in oklab, var(--${tone}) 18%, transparent)`, color: `var(--${tone})` }}>
+                              {src}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
 
-function StreamLine({ line }: { line: string }) {
-  let parsed: Record<string, unknown> | null = null
-  try { parsed = JSON.parse(line) } catch { }
-
-  if (parsed) {
-    const step = parsed.step as string | undefined
-    const persona = parsed.persona as string | undefined
-    const message = parsed.message as string | undefined
-    const error = parsed.error as string | undefined
-    const partial = parsed.response as string | undefined
-    const defense = parsed.defense as string | undefined
-    const revision = parsed.revised_plan as string | undefined
-    const final = parsed.summary as string | undefined
-
-    const display =
-      error ? error :
-      partial ? partial :
-      defense ? defense :
-      revision ? revision :
-      final ? final :
-      message || JSON.stringify(parsed, null, 2)
-
-    return (
-      <div style={{
-        padding: '10px 14px',
-        background: 'var(--surface-3)',
-        border: '1px solid var(--border)',
-        borderRadius: 8,
-        lineHeight: 1.5,
-      }}>
-        {step && (
-          <div style={{ color: 'var(--gold)', fontSize: 11, letterSpacing: '0.08em', marginBottom: 4, textTransform: 'uppercase' }}>
-            {step}
+            <div className="grid md:grid-cols-2 gap-5">
+              <Card className="glass-card border-border/50 p-6">
+                <div className="flex items-center gap-2 mb-3"><AlertTriangle className="h-4 w-4 text-destructive" /><h3 className="font-semibold">Risks identified</h3></div>
+                <ul className="space-y-2 text-sm text-muted-foreground">
+                  {roadmap.risks.map((r: string) => <li key={r}>· {r}</li>)}
+                </ul>
+              </Card>
+              <Card className="glass-card border-border/50 p-6">
+                <div className="flex items-center gap-2 mb-3"><Shield className="h-4 w-4 text-primary" /><h3 className="font-semibold">Project memory</h3></div>
+                <p className="text-sm text-muted-foreground">
+                  Mode <span className="font-mono text-foreground">{mode?.id}</span>. Future plans in this domain can inherit the lessons captured here.
+                </p>
+              </Card>
+            </div>
           </div>
         )}
-        {persona && (
-          <span style={{ color: 'var(--accent-teal)', marginRight: 8 }}>[{persona}]</span>
+
+        {stage === "blueprint" && (
+          <BlueprintPanel doc={blueprint} loading={blueprintLoading} />
         )}
-        <div style={{ color: 'var(--text-secondary)', whiteSpace: 'pre-wrap' }}>{display}</div>
-      </div>
-    )
-  }
-
-  return (
-    <div style={{ color: 'var(--text-secondary)', padding: '4px 0', opacity: 0.7 }}>{line}</div>
-  )
-}
-
-function EmptyState() {
-  return (
-    <div style={{
-      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-      height: 440, gap: '1rem', textAlign: 'center',
-    }}>
-      <div style={{
-        width: 60, height: 60, borderRadius: '50%',
-        border: '1px solid var(--gold-border)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        color: 'var(--gold)', fontSize: 24,
-      }}>◈</div>
-      <div style={{ color: 'var(--text-secondary)', fontSize: 15 }}>Awaiting session</div>
-      <div style={{ color: 'var(--text-muted)', fontSize: 13, maxWidth: 260 }}>
-        Submit a project brief to begin the multi-agent debate. When the session completes, use the Export panel to download your PDF plan.
-      </div>
-    </div>
-  )
-}
-
-function PulsingDot() {
-  return (
-    <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-      {[0, 1, 2].map(i => (
-        <div key={i} style={{
-          width: 5, height: 5, borderRadius: '50%',
-          background: 'var(--gold)',
-          animation: `pulse 1.2s ease-in-out infinite ${i * 0.2}s`,
-        }} />
-      ))}
-      <style>{`
-        @keyframes pulse {
-          0%, 80%, 100% { opacity: 0.2; transform: scale(0.8); }
-          40% { opacity: 1; transform: scale(1); }
-        }
-      `}</style>
-    </div>
-  )
+      </section>
+    </PageLayout>
+  );
 }

@@ -260,8 +260,8 @@ def make_roadmap_gantt(roadmap: list[dict], deadline_weeks: int) -> Image:
     tasks = [t[:40] + "…" if len(t) > 40 else t for t in tasks]
     n = len(tasks)
 
-    fig_h = max(3, n * 0.45 + 1.2)
-    fig, ax = plt.subplots(figsize=(11, fig_h))
+    fig_h = max(2.5, n * 0.35 + 0.8)
+    fig, ax = plt.subplots(figsize=(10, fig_h))
     fig.patch.set_facecolor("#0E0E10")
     ax.set_facecolor("#141416")
 
@@ -270,13 +270,13 @@ def make_roadmap_gantt(roadmap: list[dict], deadline_weeks: int) -> Image:
     for i, (w, task) in enumerate(zip(weeks, tasks)):
         bar_color = "#C9A84C" if i % 3 == 0 else ("#3AAFA9" if i % 3 == 1 else "#4A8FD4")
         ax.barh(i, 1, left=w - 1, color=bar_color, alpha=0.85,
-                height=0.6, edgecolor="#1A1A1E", linewidth=0.5)
+                height=0.5, edgecolor="#1A1A1E", linewidth=0.5)
         ax.text(w - 1 + 0.05, i, task,
                 va="center", ha="left", fontsize=7,
                 color="#F0EDE6", fontfamily="monospace")
 
     ax.set_xlim(0, deadline_weeks)
-    ax.set_ylim(-0.8, n)
+    ax.set_ylim(-0.5, n)
     ax.set_yticks([])
     ax.set_xlabel("Weeks", color="#8A8880", fontsize=9)
     ax.xaxis.label.set_color("#8A8880")
@@ -292,8 +292,8 @@ def make_roadmap_gantt(roadmap: list[dict], deadline_weeks: int) -> Image:
     for w in range(1, deadline_weeks + 1):
         ax.axvline(x=w, color="#1A1A1E", linewidth=0.4, zorder=0)
 
-    fig.tight_layout(pad=0.8)
-    return _fig_to_image(fig, width_mm=170, height_mm=max(60, fig_h * 12))
+    fig.tight_layout(pad=0.6)
+    return _fig_to_image(fig, width_mm=170, height_mm=max(55, fig_h * 10))
 
 
 def make_score_radar(scores: dict) -> Image:
@@ -305,7 +305,7 @@ def make_score_radar(scores: dict) -> Image:
     keys   = ["feasibility", "completeness", "alignment", "risk_awareness", "innovation"]
     vals   = [scores.get(k, 0) for k in keys]
 
-    fig, ax = plt.subplots(figsize=(6, 3.5))
+    fig, ax = plt.subplots(figsize=(5.5, 3))
     fig.patch.set_facecolor("#0E0E10")
     ax.set_facecolor("#141416")
 
@@ -332,8 +332,8 @@ def make_score_radar(scores: dict) -> Image:
     ax.yaxis.grid(True, color="#1A1A1E", linewidth=0.5, zorder=0)
     ax.set_axisbelow(True)
 
-    fig.tight_layout(pad=0.8)
-    return _fig_to_image(fig, width_mm=130, height_mm=70)
+    fig.tight_layout(pad=0.6)
+    return _fig_to_image(fig, width_mm=120, height_mm=60)
 
 
 def make_methodology_pie(methodology_weights: dict) -> Image:
@@ -345,7 +345,7 @@ def make_methodology_pie(methodology_weights: dict) -> Image:
     sizes  = list(methodology_weights.values())
     colors_list = ["#3AAFA9", "#4A8FD4", "#C9A84C"][:len(labels)]
 
-    fig, ax = plt.subplots(figsize=(4, 3))
+    fig, ax = plt.subplots(figsize=(3.8, 2.8))
     fig.patch.set_facecolor("#0E0E10")
     ax.set_facecolor("#0E0E10")
 
@@ -365,8 +365,8 @@ def make_methodology_pie(methodology_weights: dict) -> Image:
 
     ax.set_title("Methodology Contribution", color="#C9A84C",
                  fontsize=10, pad=8, fontweight="bold")
-    fig.tight_layout(pad=0.5)
-    return _fig_to_image(fig, width_mm=90, height_mm=70)
+    fig.tight_layout(pad=0.3)
+    return _fig_to_image(fig, width_mm=85, height_mm=65)
 
 
 # ── ReportLab page template ───────────────────────────────────────────────────
@@ -587,9 +587,9 @@ def generate_project_pdf(
     resources = resolve_resources(stack, idea)
 
     # ── Cover page ───────────────────────────────────────────────────────────
-    story.append(Spacer(1, 28 * mm))
+    story.append(Spacer(1, 20 * mm))
     story.append(Paragraph("PROJECT EXECUTION PLAN", s["cover_tag"]))
-    story.append(Spacer(1, 4 * mm))
+    story.append(Spacer(1, 3 * mm))
 
     # Big title
     title_text = idea[:80] + ("…" if len(idea) > 80 else "")
@@ -598,11 +598,11 @@ def generate_project_pdf(
         ParagraphStyle("cover_h1",
             fontName="Helvetica-Bold", fontSize=20,
             textColor=GOLD, leading=26,
-            spaceAfter=10, alignment=TA_CENTER,
+            spaceAfter=6, alignment=TA_CENTER,
         )
     ))
 
-    story.append(Spacer(1, 6 * mm))
+    story.append(Spacer(1, 4 * mm))
 
     # Meta table on cover
     meta_data = [
@@ -626,7 +626,7 @@ def generate_project_pdf(
         ("ROUNDEDCORNERS", [4]),
     ]))
     story.append(meta_table)
-    story.append(Spacer(1, 10 * mm))
+    story.append(Spacer(1, 7 * mm))
 
     # Score summary on cover
     best_scores = {}
@@ -693,13 +693,14 @@ def generate_project_pdf(
     # ── Charts section ───────────────────────────────────────────────────────
     story += section_box("Analysis & Visualisations", s)
 
-    # Judge scores bar chart
-    if best_scores:
+    # Judge scores bar chart — skip if all scores are 0
+    has_real_scores = best_scores and any(v > 0 for v in best_scores.values())
+    if has_real_scores:
         story.append(Paragraph("Judge Evaluation", s["h3"]))
         chart_img = make_score_radar(best_scores)
         if chart_img:
             story.append(chart_img)
-        story.append(Spacer(1, 4 * mm))
+            story.append(Spacer(1, 2 * mm))
 
     # Methodology pie
     if methodology_weights:
@@ -707,7 +708,7 @@ def generate_project_pdf(
         pie_img = make_methodology_pie(methodology_weights)
         if pie_img:
             story.append(pie_img)
-        story.append(Spacer(1, 4 * mm))
+        story.append(Spacer(1, 2 * mm))
 
     # Gantt roadmap
     if roadmap:

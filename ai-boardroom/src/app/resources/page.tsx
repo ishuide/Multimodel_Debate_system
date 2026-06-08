@@ -11,9 +11,9 @@ export default function ResourcesPage() {
   ]
 
   const github = [
-    { label: 'Repository', href: 'https://github.com/ishuide/isheyme', desc: 'Full source code' },
-    { label: 'Issues', href: 'https://github.com/ishuide/isheyme/issues', desc: 'Bug reports & feature requests' },
-    { label: 'Releases', href: 'https://github.com/ishuide/isheyme/releases', desc: 'Version history' },
+    { label: 'Repository', href: 'https://github.com/ishuide/Multimodel_Debate_system', desc: 'Full source code' },
+    { label: 'Issues', href: 'https://github.com/ishuide/Multimodel_Debate_system/issues', desc: 'Bug reports & feature requests' },
+    { label: 'Releases', href: 'https://github.com/ishuide/Multimodel_Debate_system/releases', desc: 'Version history' },
   ]
 
   const journey = [

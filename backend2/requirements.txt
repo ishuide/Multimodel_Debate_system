@@ -35,3 +35,7 @@ sentence-transformers==5.5.1
 
 # ChromaDB for semantic retrieval
 chromadb>=0.4.0
+
+# OpenAI and python-dotenv for Nvidia API
+openai
+python-dotenv

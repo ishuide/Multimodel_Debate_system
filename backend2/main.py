@@ -50,6 +50,14 @@ from pydantic import BaseModel, Field, RootModel
 import ollama
 from sse_starlette.sse import EventSourceResponse
 
+from dotenv import load_dotenv
+load_dotenv(os.path.join(os.path.dirname(__file__), "..", "keys", ".env"))
+
+try:
+    from openai import AsyncOpenAI
+except ImportError:
+    pass
+
 from agents.agent import Agent, AgentRegistry
 from state_manager import load_state, save_state, DebateState
 import project_manager
@@ -78,6 +86,31 @@ from schemas import (
     AgilePlan, WaterfallPlan, HybridPlan,
     Critique, JudgeScore, RoadmapStep, UnifiedPlan, TagList
 )
+
+class BlueprintResource(BaseModel):
+    label: str
+    url: Optional[str] = None
+    type: str
+
+class BlueprintStep(BaseModel):
+    week: int
+    title: str
+    goal: str
+    whereToStart: str
+    prerequisites: List[str]
+    resources: List[BlueprintResource]
+    tasks: List[str]
+    deliverables: List[str]
+    checkpoints: List[str]
+
+class BlueprintDoc(BaseModel):
+    steps: List[BlueprintStep]
+
+class BlueprintRequest(BaseModel):
+    roadmap: List[Dict[str, Any]]
+    brief: str
+    mode: str
+
 
 SCHEMA_MAPPING = {
     "AgilePlan": AgilePlan,
@@ -589,7 +622,30 @@ async def call_model(
     model_name: str,
     prompt: str,
     response_schema: type,
+    api_key: Optional[str] = None,
 ) -> Optional[BaseModel]:
+    if model_name.startswith("nvidia/"):
+        key_to_use = api_key or os.getenv("nvidia")
+        if not key_to_use:
+            print(f"[Main] ERROR: Nvidia API key not found or openai not installed for {model_name}")
+            return None
+        try:
+            from openai import AsyncOpenAI
+            client = AsyncOpenAI(base_url="https://integrate.api.nvidia.com/v1", api_key=key_to_use)
+            real_model = model_name.replace("nvidia/", "")
+            response = await client.chat.completions.create(
+                model=real_model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.2,
+                max_tokens=4096,
+                response_format={"type": "json_object"}
+            )
+            content = response.choices[0].message.content
+            return response_schema.model_validate_json(content)
+        except Exception as err:
+            print(f"[Main] ERROR calling Nvidia NIM ({model_name}): {err}")
+            return None
+
     try:
         response = await asyncio.to_thread(
             ollama.chat,
@@ -618,6 +674,7 @@ async def debate(
     members: int = None,
     deadlineWeeks: int = None,
     session_id: Optional[str] = None,
+    nvidiaKey: Optional[str] = None,
 ):
     input_data = {
         "idea": idea or default_user_input["idea"],
@@ -1093,7 +1150,7 @@ The revised plan MUST include a top-level "revision_notes" object:
                 validation_issues=json.dumps(validation_results.get(persona, {}).get('warnings', []), indent=2)
             )
     
-            judge_result = await call_model(judge_agent.model, judge_prompt, JudgeScore)
+            judge_result = await call_model(judge_agent.model, judge_prompt, JudgeScore, api_key=nvidiaKey)
     
             if judge_result:
                 metrics = judge_result.model_dump()
@@ -1252,7 +1309,7 @@ The revised plan MUST include a top-level "revision_notes" object:
             validation_findings=json.dumps({p: r.get('warnings', []) for p, r in validation_results.items()}, indent=2)
         )
 
-        synthesized_plan = await call_model(consensus_agent.model, synthesis_prompt, UnifiedPlan)
+        synthesized_plan = await call_model(consensus_agent.model, synthesis_prompt, UnifiedPlan, api_key=nvidiaKey)
 
         # Phase 9 — Synthesis validation
         syn_validation = ValidationResult()
@@ -1277,7 +1334,7 @@ The revised plan MUST include a top-level "revision_notes" object:
                 "- no unrelated domains or products\n"
                 "Output ONLY the JSON object."
             )
-            synthesized_plan = await call_model(consensus_agent.model, retry_synthesis_prompt, UnifiedPlan)
+            synthesized_plan = await call_model(consensus_agent.model, retry_synthesis_prompt, UnifiedPlan, api_key=nvidiaKey)
             if synthesized_plan:
                 syn_validation = validate_synthesis(synthesized_plan, input_data["idea"])
 
@@ -1438,6 +1495,42 @@ The revised plan MUST include a top-level "revision_notes" object:
             print(f"[Main] WARNING: Failed to save memory: {e}")
 
     return EventSourceResponse(event_generator())
+
+@app.post("/blueprint")
+async def generate_blueprint_endpoint(req: BlueprintRequest):
+    prompt = f"""Brief: {req.brief}
+Mode: {req.mode}
+
+Expand the following roadmap into a detailed implementation blueprint:
+{json.dumps(req.roadmap, indent=2)}
+
+Return JSON: {{ "steps": [BlueprintStep,…] }} where BlueprintStep is:
+{{ "week": number, "title": "...", "goal": "...", "whereToStart": "...",
+  "prerequisites": ["..."], "resources": [{{"label":"...","url":"...","type":"doc|course|video|repo"}}],
+  "tasks": ["..."], "deliverables": ["..."], "checkpoints": ["..."] }}"""
+
+    res = await call_model("qwen2:1.5b", prompt, BlueprintDoc)
+    if res:
+        return res.model_dump()
+    
+    # Fallback mock
+    return {
+        "steps": [
+            {
+                "week": s.get("week", i+1),
+                "title": s.get("task", f"Step {i+1}"),
+                "goal": f"Complete {s.get('task', 'step')}",
+                "whereToStart": "Review brief and roadmap.",
+                "prerequisites": [],
+                "resources": [],
+                "tasks": ["Plan", "Implement", "Review"],
+                "deliverables": ["Completed artifact"],
+                "checkpoints": ["QA passed"]
+            }
+            for i, s in enumerate(req.roadmap)
+        ]
+    }
+
 
 @app.get("/health")
 async def health_check():

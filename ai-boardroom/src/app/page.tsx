@@ -13,13 +13,7 @@ const FLOW_STEPS = [
   { label: 'Consensus', sub: 'Final roadmap', color: 'var(--gold)', delay: 1050 },
 ]
 
-const SCORES = [
-  { label: 'Feasibility', desc: 'Can it realistically be built?', value: 87 },
-  { label: 'Completeness', desc: 'Does it cover all requirements?', value: 92 },
-  { label: 'Alignment', desc: 'Matches user intent precisely?', value: 79 },
-  { label: 'Risk Awareness', desc: 'Execution risks identified?', value: 84 },
-  { label: 'Innovation', desc: 'Novel approach or feature?', value: 71 },
-]
+
 
 const USE_CASES = [
   { title: 'Startup Planning', items: ['Validate your idea', 'Build execution roadmaps', 'Estimate realistic timelines'], icon: '◈' },
@@ -39,8 +33,6 @@ const PHASES = [
 
 export default function HomePage() {
   const [visible, setVisible] = useState<boolean[]>(Array(FLOW_STEPS.length).fill(false))
-  const [scoreAnimate, setScoreAnimate] = useState(false)
-  const scoreRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     FLOW_STEPS.forEach((step, i) => {
@@ -54,14 +46,7 @@ export default function HomePage() {
     })
   }, [])
 
-  useEffect(() => {
-    const obs = new IntersectionObserver(
-      entries => { if (entries[0].isIntersecting) setScoreAnimate(true) },
-      { threshold: 0.3 }
-    )
-    if (scoreRef.current) obs.observe(scoreRef.current)
-    return () => obs.disconnect()
-  }, [])
+
 
   return (
     <div style={{ paddingTop: 64 }}>
@@ -133,35 +118,42 @@ export default function HomePage() {
           <div style={{ display: 'flex', gap: 14, justifyContent: 'center', flexWrap: 'wrap' }}>
             <Link href="/boardroom" style={{
               padding: '13px 32px',
-              background: 'var(--gold)',
-              color: '#0E0E10',
+              background: 'transparent',
+              color: 'var(--text-secondary)',
               borderRadius: 8,
-              fontSize: 15,
+              border: '1px solid var(--border)',
+              fontSize: 20,
               fontWeight: 500,
               letterSpacing: '0.01em',
-              transition: 'opacity 0.15s',
+              transition: 'border-color 0.15s, color 0.15s',
             }}
-            onMouseEnter={e => (e.currentTarget.style.opacity = '0.88')}
-            onMouseLeave={e => (e.currentTarget.style.opacity = '1')}>
+              onMouseEnter={e => {
+                e.currentTarget.style.borderColor = 'var(--gold-border)'
+                e.currentTarget.style.color = 'var(--gold)'
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.borderColor = 'var(--border)'
+                e.currentTarget.style.color = 'var(--text-secondary)'
+              }}>
               Enter the Boardroom →
             </Link>
-            <a href="https://github.com/ishuide/isheyme" target="_blank" rel="noreferrer" style={{
+            <a href="https://github.com/ishuide/Multimodel_Debate_system" target="_blank" rel="noreferrer" style={{
               padding: '13px 32px',
               background: 'transparent',
               color: 'var(--text-secondary)',
               border: '1px solid var(--border)',
               borderRadius: 8,
-              fontSize: 15,
+              fontSize: 20,
               transition: 'border-color 0.15s, color 0.15s',
             }}
-            onMouseEnter={e => {
-              e.currentTarget.style.borderColor = 'var(--gold-border)'
-              e.currentTarget.style.color = 'var(--gold)'
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.borderColor = 'var(--border)'
-              e.currentTarget.style.color = 'var(--text-secondary)'
-            }}>
+              onMouseEnter={e => {
+                e.currentTarget.style.borderColor = 'var(--gold-border)'
+                e.currentTarget.style.color = 'var(--gold)'
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.borderColor = 'var(--border)'
+                e.currentTarget.style.color = 'var(--text-secondary)'
+              }}>
               View Source
             </a>
           </div>
@@ -193,8 +185,8 @@ export default function HomePage() {
               padding: '2rem',
               transition: 'background 0.2s',
             }}
-            onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-3)')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'var(--surface-2)')}>
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-3)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'var(--surface-2)')}>
               <div style={{
                 fontFamily: 'var(--font-mono)',
                 fontSize: 11,
@@ -213,46 +205,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── Scoring System ───────────────────────────────── */}
-      <section ref={scoreRef} style={{
-        padding: '6rem 2rem',
-        background: 'var(--surface-2)',
-        borderTop: '1px solid var(--border)',
-        borderBottom: '1px solid var(--border)',
-      }}>
-        <div style={{ maxWidth: 800, margin: '0 auto' }}>
-          <SectionLabel>Judge Evaluation</SectionLabel>
-          <h2 style={{ ...sectionHeading, marginBottom: '0.75rem' }}>Five-dimensional scoring</h2>
-          <p style={{ color: 'var(--text-secondary)', marginBottom: '3rem', maxWidth: 480 }}>
-            Every plan is evaluated independently across five criteria. Scores are capped by domain analysis — you can't fake alignment.
-          </p>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-            {SCORES.map((s, i) => (
-              <div key={s.label}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <div>
-                    <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--text-primary)' }}>{s.label}</span>
-                    <span style={{ fontSize: 13, color: 'var(--text-muted)', marginLeft: 12 }}>{s.desc}</span>
-                  </div>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 14, color: 'var(--gold)' }}>
-                    {s.value}
-                  </span>
-                </div>
-                <div style={{ height: 4, background: 'var(--surface-4)', borderRadius: 2, overflow: 'hidden' }}>
-                  <div style={{
-                    height: '100%',
-                    background: `linear-gradient(90deg, var(--gold), var(--gold-light))`,
-                    borderRadius: 2,
-                    width: scoreAnimate ? `${s.value}%` : '0%',
-                    transition: `width 0.9s cubic-bezier(0.4,0,0.2,1) ${i * 120}ms`,
-                  }} />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+      {/* Judge Evaluation removed per request */}
 
       {/* ── Use Cases ────────────────────────────────────── */}
       <section style={{ padding: '6rem 2rem', maxWidth: 1100, margin: '0 auto' }}>
@@ -272,14 +225,14 @@ export default function HomePage() {
               padding: '1.75rem',
               transition: 'border-color 0.2s, background 0.2s',
             }}
-            onMouseEnter={e => {
-              e.currentTarget.style.borderColor = 'var(--gold-border)'
-              e.currentTarget.style.background = 'var(--surface-3)'
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.borderColor = 'var(--border)'
-              e.currentTarget.style.background = 'var(--surface-2)'
-            }}>
+              onMouseEnter={e => {
+                e.currentTarget.style.borderColor = 'var(--gold-border)'
+                e.currentTarget.style.background = 'var(--surface-3)'
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.borderColor = 'var(--border)'
+                e.currentTarget.style.background = 'var(--surface-2)'
+              }}>
               <div style={{ fontSize: 22, marginBottom: '1rem', color: 'var(--gold)' }}>{uc.icon}</div>
               <div style={{ fontSize: 16, fontWeight: 500, marginBottom: '1rem', color: 'var(--text-primary)' }}>
                 {uc.title}
@@ -330,8 +283,8 @@ export default function HomePage() {
           display: 'inline-block',
           transition: 'opacity 0.15s',
         }}
-        onMouseEnter={e => (e.currentTarget.style.opacity = '0.88')}
-        onMouseLeave={e => (e.currentTarget.style.opacity = '1')}>
+          onMouseEnter={e => (e.currentTarget.style.opacity = '0.88')}
+          onMouseLeave={e => (e.currentTarget.style.opacity = '1')}>
           Open the Boardroom
         </Link>
       </section>
@@ -345,7 +298,7 @@ export default function HomePage() {
         color: 'var(--text-muted)',
       }}>
         AI Boardroom — built by{' '}
-        <a href="https://github.com/ishuide/isheyme" target="_blank" rel="noreferrer"
+        <a href="https://github.com/ishuide/Multimodel_Debate_system" target="_blank" rel="noreferrer"
           style={{ color: 'var(--text-secondary)' }}>
           ishuide
         </a>

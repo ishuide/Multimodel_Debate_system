@@ -12,10 +12,10 @@ const navLinks = [
 ]
 
 const githubLinks = [
-  { label: 'Repository', href: 'https://github.com/ishuide/isheyme' },
-  { label: 'Source Code', href: 'https://github.com/ishuide/isheyme' },
-  { label: 'Issues', href: 'https://github.com/ishuide/isheyme/issues' },
-  { label: 'Releases', href: 'https://github.com/ishuide/isheyme/releases' },
+  { label: 'Repository', href: 'https://github.com/ishuide/Multimodel_Debate_system' },
+  { label: 'Source Code', href: 'https://github.com/ishuide/Multimodel_Debate_system' },
+  { label: 'Issues', href: 'https://github.com/ishuide/Multimodel_Debate_system/issues' },
+  { label: 'Releases', href: 'https://github.com/ishuide/Multimodel_Debate_system/releases' },
 ]
 
 export default function Navbar() {
