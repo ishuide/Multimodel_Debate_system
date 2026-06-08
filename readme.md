@@ -17,6 +17,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![Next.js](https://img.shields.io/badge/Next.js-14-000000?style=flat-square&logo=nextdotjs&logoColor=white)](https://nextjs.org)
 [![Ollama](https://img.shields.io/badge/Ollama-Local_LLMs-FF6B35?style=flat-square)](https://ollama.ai)
+[![Nvidia NIM](https://img.shields.io/badge/Nvidia_NIM-Cloud_LLMs-76B900?style=flat-square)](https://build.nvidia.com)
 [![ChromaDB](https://img.shields.io/badge/ChromaDB-Vector_Store-orange?style=flat-square)](https://www.trychroma.com)
 [![License](https://img.shields.io/badge/License-MIT-gold?style=flat-square)](LICENSE)
 
@@ -58,11 +59,11 @@ Before any agent generates a plan, the system retrieves two things in parallel:
 ### Phase 2 — Parallel Plan Generation + Isolation Enforcement
 Three agents generate independent plans **simultaneously** via `asyncio.gather`:
 
-| Agent | Model | Methodology | Schema |
+| Agent | Backend Persona | Local Model | UI Counterpart (e.g., Coding Mode) |
 |---|---|---|---|
-| Agile PM | `phi3:mini` | Sprints, MVP, velocity, user stories | `AgilePlan` |
-| Waterfall PM | `qwen2:1.5b` | Sequential phases, requirements, sign-offs | `WaterfallPlan` |
-| Hybrid PM | `smollm2:1.7b` | Combined Waterfall phases + Agile iterations | `HybridPlan` |
+| Agent 1 | Agile PM | `phi3:mini` | Pragmatist (The Shipping Engineer) |
+| Agent 2 | Waterfall PM | `qwen2:1.5b` | Architect (The System Designer) |
+| Agent 3 | Hybrid PM | `smollm2:1.7b` | Reviewer (Quality & DX Expert) |
 
 After generation, `AgentIsolationValidator` scans each plan for **methodology vocabulary leakage** — Agile plans that mention Waterfall phases get flagged and penalised. Contaminated plans are blocked from proceeding unmodified.
 
@@ -81,7 +82,7 @@ Every plan is independently validated against a `ValidationResult` schema that a
 Checks include: invalid week/day values, duplicate phases, missing risk statements, generic risk labels, mitigations disguised as risks, and domain contamination in roadmap content.
 
 ### Phase 6 — Judge Evaluation
-An independent judge agent (`qwen2:1.5b`) scores each plan across five dimensions:
+An independent judge agent (using Nvidia NIM's `meta/llama-3.1-70b-instruct`) scores each plan across five dimensions:
 
 | Dimension | What It Measures |
 |---|---|
@@ -101,7 +102,7 @@ Final score = judge score − validation penalty.
 All six debate rounds (proposals → critiques → defenses → revisions → judge → consensus) are stored in `DebateState` and persisted to disk via JSON. Every session is replayable.
 
 ### Phase 8 — Consensus Formation
-The Chief Strategy Officer agent (`phi3:mini`) receives the **top-scoring revised plans** (not all three — only plans that passed validation and judge evaluation). It:
+The Chief Strategy Officer agent (using Nvidia NIM's `meta/llama-3.1-8b-instruct`) receives the **top-scoring revised plans** (not all three — only plans that passed validation and judge evaluation). It:
 - Identifies overlapping tasks across plans
 - Weights roadmap contributions by final score — the highest-scoring plan's milestones form the primary backbone
 - Merges, deduplicates, and attributes every roadmap milestone to its source methodology
@@ -126,8 +127,10 @@ The final SSE event (`event: final`) returns a fully-typed output including:
 | Component | Technology | Purpose |
 |---|---|---|
 | API Framework | FastAPI | REST + SSE streaming endpoint |
-| LLM Runtime | Ollama | Runs local models without API keys |
-| Planning Models | phi3:mini, qwen2:1.5b, smollm2:1.7b | The three debating agents + judge |
+| Local LLM Runtime | Ollama | Runs local models (debaters) without API keys |
+| Cloud LLM API | Nvidia NIM API | Runs high-end models (judge, consensus) |
+| Debater Models | phi3:mini, qwen2:1.5b, smollm2:1.7b | The three debating agents |
+| Judge / Consensus | Llama-3.1-70B & Llama-3.1-8B | Evaluation and Synthesis |
 | Vector Database | ChromaDB | RAG knowledge base + memory store |
 | Embeddings | sentence-transformers / all-MiniLM-L6-v2 | Semantic similarity for retrieval |
 | Schema Validation | Pydantic v2 | Typed plan schemas, enforced JSON output |
@@ -146,6 +149,8 @@ The final SSE event (`event: final`) returns a fully-typed output including:
 ### Project Structure
 ```
 ai-boardroom/
+├── keys/
+│   └── .env                  # API keys (e.g., nvidia)
 ├── backend/
 │   ├── main.py               # FastAPI app + 10-phase debate engine
 │   ├── agents/
@@ -176,21 +181,6 @@ ai-boardroom/
 
 ---
 
-## How It Was Built — 3 Weeks
-
-This project was built from scratch over three weeks as a solo project.
-
-**Week 1 — Backend Core**
-The initial goal was a proof of concept: three Ollama models responding to the same prompt. By end of week 1, the debate loop worked — proposal generation, critique round, defense round, and a basic consensus agent. No validation, no scoring, no memory. Plans frequently hallucinated unrelated domains. This was the most frustrating phase because small models frequently ignored schema constraints.
-
-**Week 2 — Intelligence Layer**
-The validation system was the biggest engineering effort. Plans needed to be checked for domain contamination, methodology leakage, duplicate weeks, and malformed risk entries — programmatically, not by the LLM. `DomainAnalyzer` and `AgentIsolationValidator` were built to make these checks deterministic. The judge scoring system came next, with hard caps to prevent inflated alignment scores. ChromaDB was integrated for RAG retrieval, and the 4-gate memory filtering system was built after early tests showed contaminated memories actively harmed plan quality.
-
-**Week 3 — Frontend + Output**
-The Next.js frontend was built with a dark luxury aesthetic to match the "boardroom" metaphor. The SSE streaming display shows the debate in real time. The PDF export was the last piece — ReportLab for layout, Matplotlib for charts, and live resource link resolution against npm/PyPI to avoid hallucinated URLs.
-
----
-
 ## Prerequisites
 
 Before cloning, ensure you have:
@@ -199,6 +189,7 @@ Before cloning, ensure you have:
 - **Node.js 18+** — `node --version`
 - **Ollama** — installed and running: [https://ollama.ai](https://ollama.ai)
 - **Git** — `git --version`
+- **Nvidia API Key** — For running the judge and consensus agents (see Step 4 below).
 
 ---
 
@@ -207,13 +198,13 @@ Before cloning, ensure you have:
 ### 1 — Clone the repository
 
 ```bash
-git clone https://github.com/ishuide/isheyme.git
-cd isheyme
+git clone https://github.com/ishuide/Multimodel_Debate_system.git
+cd Multimodel_Debate_system
 ```
 
 ### 2 — Pull the required Ollama models
 
-The debate engine uses three small models. Pull all of them before starting:
+The debate engine uses three small local models. Pull all of them before starting:
 
 ```bash
 ollama pull phi3:mini
@@ -245,15 +236,16 @@ venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-If `requirements.txt` is not yet present, install manually:
+### 4 — Configure your API Keys
+The system uses Nvidia NIM for the Judge and Consensus agents. You must store your API key in a `.env` file inside a `keys/` directory at the project root.
 
-```bash
-pip install fastapi uvicorn sse-starlette ollama \
-            chromadb sentence-transformers \
-            pydantic reportlab matplotlib requests
+Create `keys/.env`:
+```ini
+nvidia=nvapi-YOUR_API_KEY_HERE
 ```
+Alternatively, you can provide your Nvidia API Key directly from the UI by clicking the "Ollama Status" dot in the top right corner of the web app.
 
-### 4 — Start the backend server
+### 5 — Start the backend server
 
 ```bash
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
@@ -273,12 +265,12 @@ curl http://localhost:8000/health
 # → {"status": "ok"}
 ```
 
-### 5 — Set up the frontend
+### 6 — Set up the frontend
 
 Open a second terminal:
 
 ```bash
-cd frontend   # or wherever your Next.js project lives
+cd ai-boardroom
 
 npm install
 ```
@@ -289,7 +281,7 @@ Create the environment file:
 echo "NEXT_PUBLIC_API_URL=http://localhost:8000" > .env.local
 ```
 
-### 6 — Start the frontend dev server
+### 7 — Start the frontend dev server
 
 ```bash
 npm run dev
@@ -297,9 +289,9 @@ npm run dev
 
 Open `http://localhost:3000` in your browser.
 
-### 7 — Run a test session via API (optional)
+### 8 — Run a test session via API (optional)
 
-You can test the debate engine directly without the frontend:
+You can test the debate engine directly without the frontend (Make sure your Nvidia key is set!):
 
 ```bash
 curl "http://localhost:8000/debate?idea=Task+management+app+for+remote+teams&members=4&deadlineWeeks=10&techStack=Next.js%2C+FastAPI%2C+PostgreSQL"
@@ -324,6 +316,7 @@ Starts a multi-agent debate session. Returns a Server-Sent Events stream.
 | `deadlineWeeks` | int | Yes | Target deadline in weeks |
 | `techStack` | string | No | Comma-separated tech stack |
 | `session_id` | string | No | Resume an existing session |
+| `nvidiaKey` | string | No | Override for the Nvidia NIM API key |
 
 **SSE Event Types**
 
@@ -459,7 +452,6 @@ MIT — see [LICENSE](LICENSE) for details.
 
 <div align="center">
 
-Built by [ishuide](https://github.com/ishuide/isheyme) · 3 weeks · 100% local LLMs
+Built by [ishuide](https://github.com/ishuide/Multimodel_Debate_system) · 3 weeks · 100% local LLMs + Nvidia NIM 
 
 </div>
-Javascript for we are focused on a fast, lightweight server with simple SSE streaming.
